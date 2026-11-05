@@ -1,0 +1,7 @@
+{
+  "issue_title": "Fix #11767,  restore the original parameter pair instead of giving default value when doing URL.parse.",
+  "issue_text": "## What is the purpose of the change\r\n\r\nWhen value has no value, make sure value is an empty string, rather than assigning the value of name to value\r\n\r\nFor key-value pair `key_name=`, the generated URL parameter should be 'key_name=' rather than `key_name=key_ name`\r\n\r\n## Brief changelog\r\n\r\n## Verifying this change\r\n\r\n## Checklist\r\n- [x] Make sure there is a [GitHub_issue](https://github.com/apache/dubbo/issues/11767) \r\n\r\n",
+  "repo_key": "apache__dubbo",
+  "repository_path": "apache__dubbo",
+  "repograph_path": "3.1-d0a1bd0"
+}

@@ -1,0 +1,250 @@
+# Reproducible deployment of the currently verified minimal workflow.
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-repocoding}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-repocoding}
+      POSTGRES_DB: ${POSTGRES_DB:-repocoding}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-repocoding} -d ${POSTGRES_DB:-repocoding}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  repo-seed:
+    image: repocoding-api:local
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: ["python", "/app/seed_repo.py"]
+    environment:
+      EXPECTED_REPO_REVISION: d0a1bd014331483c19208b831c4f6b488654a508
+    volumes:
+      - ../repositories/apache__dubbo:/seed/apache__dubbo:ro
+      - repo_data:/workspace/repos
+    restart: "no"
+
+  api:
+    image: repocoding-api:local
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-repocoding}:${POSTGRES_PASSWORD:-repocoding}@postgres:5432/${POSTGRES_DB:-repocoding}
+      REPOSITORY_ROOT: /workspace/repos
+      REPOGRAPH_ROOT: /workspace/repographs
+      EVISTATE_HOME: /opt/evistate
+      WORKTREE_ROOT: /workspace/worktrees
+      ARTIFACT_ROOT: /workspace/artifacts
+      REPAIR_ENABLED: "true"
+      REDIS_URL: redis://redis:6379/0
+      FULL_PIPELINE_ENABLED: "true"
+      CORS_ORIGINS: http://localhost:${WEB_PORT:-8080},http://127.0.0.1:${WEB_PORT:-8080}
+    command: ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+    volumes:
+      - repo_data:/workspace/repos
+      - ../dubbo:/workspace/repographs:ro
+      - ./runtime/evistate:/opt/evistate:ro
+      - ./deployment-data/worktrees:/workspace/worktrees
+      - ./deployment-data/artifacts:/workspace/artifacts
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    depends_on:
+      postgres:
+        condition: service_healthy
+      repo-seed:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)"]
+      interval: 10s
+      timeout: 6s
+      retries: 12
+      start_period: 20s
+
+  validation-worker:
+    image: repocoding-api:local
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-repocoding}:${POSTGRES_PASSWORD:-repocoding}@postgres:5432/${POSTGRES_DB:-repocoding}
+      REDIS_URL: redis://redis:6379/0
+      WORKTREE_ROOT: /workspace/worktrees
+      SANDBOX_URL: http://java-sandbox:8080
+    command: ["celery", "-A", "app.celery_app.celery_app", "worker", "--loglevel=INFO", "--concurrency=1", "--queues=validation"]
+    volumes:
+      - ./deployment-data/worktrees:/workspace/worktrees:ro
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      java-sandbox:
+        condition: service_healthy
+    networks:
+      - default
+      - isolated-tests
+
+  codelens-worker:
+    image: repocoding-research:local
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      args:
+        INSTALL_RESEARCH: "true"
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-repocoding}:${POSTGRES_PASSWORD:-repocoding}@postgres:5432/${POSTGRES_DB:-repocoding}
+      REDIS_URL: redis://redis:6379/0
+      REPOSITORY_ROOT: /workspace/repos
+      REPOGRAPH_ROOT: /workspace/repographs
+      CODELENS_HOME: /opt/codelens
+      EVISTATE_HOME: /opt/evistate
+      VECTORSTORE_ROOT: /workspace/vectorstores
+      WORKTREE_ROOT: /workspace/worktrees
+      ARTIFACT_ROOT: /workspace/artifacts
+      HF_HOME: /workspace/model-cache
+      XDG_CACHE_HOME: /workspace/model-cache
+      CODE_EMBEDDING_DEVICE: cpu
+      CODE_EMBEDDING_BATCH_SIZE: "8"
+      JLOC_VECTORSTORE_BUILD_CHUNK_SIZE: "128"
+      JLOC_LLM_REQUEST_TIMEOUT_SEC: "240"
+      REPAIR_ENABLED: "true"
+      FULL_PIPELINE_ENABLED: "true"
+    command: ["celery", "-A", "app.celery_app.celery_app", "worker", "--loglevel=INFO", "--concurrency=1", "--queues=celery"]
+    volumes:
+      - repo_data:/workspace/repos
+      - ../dubbo:/workspace/repographs:ro
+      - ./runtime/codelens:/opt/codelens:ro
+      - ./runtime/evistate:/opt/evistate:ro
+      - ./deployment-data/vectorstores:/workspace/vectorstores
+      - ./deployment-data/worktrees:/workspace/worktrees
+      - ./deployment-data/artifacts:/workspace/artifacts
+      - code_model_cache:/workspace/model-cache
+    read_only: true
+    tmpfs:
+      - /tmp:size=1g,mode=1777
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      repo-seed:
+        condition: service_completed_successfully
+
+  task-beat:
+    image: repocoding-api:local
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-repocoding}:${POSTGRES_PASSWORD:-repocoding}@postgres:5432/${POSTGRES_DB:-repocoding}
+      REDIS_URL: redis://redis:6379/0
+    command: ["celery", "-A", "app.celery_app.celery_app", "beat", "--loglevel=INFO", "--schedule=/tmp/celerybeat-schedule"]
+    read_only: true
+    tmpfs:
+      - /tmp:size=128m,mode=1777
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  java-sandbox:
+    image: repocoding-java-runner:local
+    build:
+      context: sandbox
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=3g,mode=1777
+    volumes:
+      - ./deployment-data/worktrees:/workspace/worktrees:ro
+      - java_m2:/cache/m2
+      - java_gradle:/cache/gradle
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    mem_limit: 5g
+    cpus: 2.0
+    networks:
+      - isolated-tests
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=5)"]
+      interval: 10s
+      timeout: 6s
+      retries: 12
+
+  java-deps:
+    profiles: ["java-setup"]
+    image: repocoding-java-runner:local
+    build:
+      context: sandbox
+      dockerfile: Dockerfile
+    working_dir: /tmp
+    entrypoint: ["sh", "-c"]
+    command: ["mkdir -p /tmp/repo && cp -r /input/. /tmp/repo && cd /tmp/repo && mvn -B -pl dubbo-common -am -Dtest=URLStrParserTest -Dsurefire.failIfNoSpecifiedTests=false -Dmaven.repo.local=/cache/m2 test"]
+    read_only: true
+    tmpfs:
+      - /tmp:size=3g,mode=1777
+    volumes:
+      - ../repositories/apache__dubbo:/input:ro
+      - java_m2:/cache/m2
+      - java_gradle:/cache/gradle
+
+  web:
+    image: repocoding-web:local
+    build:
+      context: .
+      dockerfile: deployment/Dockerfile.frontend
+    restart: unless-stopped
+    ports:
+      - "${WEB_BIND_HOST:-127.0.0.1}:${WEB_PORT:-8080}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+volumes:
+  postgres_data:
+  repo_data:
+  java_m2:
+  java_gradle:
+  code_model_cache:
+
+networks:
+  isolated-tests:
+    internal: true

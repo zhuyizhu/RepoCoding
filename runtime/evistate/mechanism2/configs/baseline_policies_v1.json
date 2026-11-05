@@ -1,0 +1,21 @@
+{
+  "schema_version": "fixed-trace-baselines/v1",
+  "experiment_scope": "development; frozen Orca trajectories; not an online causal intervention",
+  "conditions": ["Original", "PreserveAll", "PreserveNonRefuted"],
+  "development_selection": {"rule": "first 8 instance IDs in frozen baseline input order", "count": 8},
+  "extended_selection": {"rule": "all instance IDs in the same frozen input order", "count": 32},
+  "candidate_sources": ["PROPOSAL", "RETRIEVAL", "FINAL"],
+  "exclude_action_target_only": true,
+  "native_final_k": "number of unique nonempty normalized file paths in original bug_locations",
+  "candidate_order": "first_seen_step ascending, then original frozen ledger row ordinal; no model confidence or new score",
+  "Original": "Keep original final file order and original final locations exactly after path normalization and file deduplication.",
+  "PreserveAll": "Retain all observed candidate-scope location records in memory, then project their existing first-appearance order to unique files up to original final K. PreserveAll refers to historical retention, not output expansion.",
+  "PreserveNonRefuted": "Apply the same projection after excluding only exact location records whose pre-existing frozen classification is EXPLICITLY_REFUTED with a nonempty refutation_events list. Method or symbol refutation never refutes the file or another location record.",
+  "insufficient_eligible_fallback": "Fill unoccupied slots in original final order to preserve exact native K; mark any forced refuted fallback explicitly. No search for replacement candidates.",
+  "k_zero": "Keep final output empty, while reporting preserved memory candidates; do not expand native cardinality.",
+  "methods": "Export only method names already present on selected observed location records; no method inference, disambiguation, signature synthesis, or line inference.",
+  "reference_isolation": "The runner opens only the four frozen allowlisted baseline/ledger/classification/freeze-marker inputs and this policy file; it never loads reference, patch or evaluation files.",
+  "additional_llm_calls": 0,
+  "additional_tool_calls": 0,
+  "new_search_actions": 0
+}

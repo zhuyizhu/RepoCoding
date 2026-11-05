@@ -1,0 +1,26 @@
+{
+  "version": "evidence-rules-heuristic-pilot-v1",
+  "enabled_rules": [
+    "R_HEURISTIC_FAULT_PROPOSAL_EXACT_FILE_V1"
+  ],
+  "rule_contract": {
+    "R_HEURISTIC_FAULT_PROPOSAL_EXACT_FILE_V1": {
+      "predicate": "FAULT_RELEVANT",
+      "polarity": "POSITIVE",
+      "subject": "exact FILE anchor",
+      "precondition": "the same frozen native candidate record contains an explicit PROPOSAL source and a repository-relative file path",
+      "binding": "SUPPORT only to the exact FAULT_RELEVANT FILE hypothesis",
+      "directness": "DIRECT",
+      "strength": "SOFT"
+    }
+  },
+  "paper_ready": false,
+  "gold_access": false,
+  "scientific_status": "engineering signal pilot only",
+  "prohibited_inputs": [
+    "benchmark gold or patch labels",
+    "correctness outcomes",
+    "new LLM, verifier, search, or ranking calls",
+    "FAULT_RELEVANT rules from the pending E2-mini paper freeze"
+  ]
+}

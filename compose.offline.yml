@@ -1,0 +1,22 @@
+# Use previously built local images when Docker Hub is temporarily unreachable.
+# Bind current source and frontend build output so the running services use this checkout.
+services:
+  api:
+    volumes:
+      - ./backend/app:/app/app:ro
+      - ./backend/alembic:/app/alembic:ro
+      - ./backend/alembic.ini:/app/alembic.ini:ro
+  validation-worker:
+    volumes:
+      - ./backend/app:/app/app:ro
+  codelens-worker:
+    volumes:
+      - ./backend/app:/app/app:ro
+      - ./backend/prepare_codelens_index.py:/app/prepare_codelens_index.py:ro
+  task-beat:
+    volumes:
+      - ./backend/app:/app/app:ro
+  web:
+    volumes:
+      - ./frontend/dist:/usr/share/nginx/html:ro
+      - ./deployment/nginx.conf:/etc/nginx/conf.d/default.conf:ro

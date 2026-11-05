@@ -1,0 +1,22 @@
+{
+  "version": "evidence-rules-budgeted-review-v1",
+  "enabled_rules": [
+    "R_HEURISTIC_FAULT_PROPOSAL_EXACT_FILE_V1"
+  ],
+  "paper_ready": false,
+  "gold_access": false,
+  "scientific_status": "post-hoc adapter repair; prospective validation required",
+  "native_review_budget": {
+    "max_additional_llm_calls_per_instance": 1,
+    "may_introduce_new_candidates": false,
+    "candidate_set": "native Top-3",
+    "cardinality": 1,
+    "ranked_output": "preserve native Top-5 length and membership"
+  },
+  "prohibited_inputs": [
+    "benchmark gold or patch labels",
+    "correctness outcomes",
+    "files outside the native Top-3",
+    "post-hoc rule changes by instance"
+  ]
+}

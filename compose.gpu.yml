@@ -1,0 +1,18 @@
+# Optional NVIDIA GPU acceleration for the CodeLens embedding model.
+# docker compose -f compose.deploy.yml -f compose.gpu.yml build codelens-worker
+services:
+  codelens-worker:
+    image: repocoding-research-gpu:local
+    build:
+      args:
+        INSTALL_RESEARCH: "true"
+        TORCH_INDEX_URL: https://download.pytorch.org/whl/cu128
+    gpus: all
+    environment:
+      CODE_EMBEDDING_DEVICE: cuda
+      CODE_EMBEDDING_BATCH_SIZE: "16"
+      CODE_EMBEDDING_SHOW_PROGRESS: "true"
+      CODELENS_REQUIRE_CUDA: "true"
+      OMP_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+      TOKENIZERS_PARALLELISM: "false"

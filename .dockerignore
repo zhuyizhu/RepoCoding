@@ -1,0 +1,14 @@
+**/node_modules
+**/dist
+**/__pycache__
+**/.pytest_cache
+.testdeps
+.researchdeps
+.git
+.env
+deployment/public.env
+runtime
+worktrees
+artifacts
+deployment-data
+*.log
